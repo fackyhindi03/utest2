@@ -3,22 +3,34 @@
 import requests
 from config import API_BASE
 
+def _extract_id(raw_id):
+    """
+    Turn a Mongo‐style ObjectId dict into its string, or else just str(raw_id).
+    """
+    if isinstance(raw_id, dict):
+        for key in ("$oid", "id", "value"):
+            if key in raw_id:
+                return raw_id[key]
+        return str(raw_id)
+    return raw_id
+
 def _normalize_list_of_lists(raw):
     """
-    Turn a [[id,name,poster,...], …] into
+    Turn [[id,name,poster,...], …] into
     [ {"id":id, "name":name, "poster":poster}, … ]
     """
     out = []
     for item in raw:
         if isinstance(item, list):
-            # unpack at least id & name; poster if present
             id_, name, *rest = item
             out.append({
-                "id":     id_,
+                "id":     _extract_id(id_),
                 "name":   name,
                 "poster": rest[0] if rest else ""
             })
         elif isinstance(item, dict):
+            # if id is nested, extract it
+            item["id"] = _extract_id(item.get("id"))
             out.append(item)
     return out
 
@@ -26,37 +38,41 @@ def search_anime(query: str, page: int = 1):
     resp = requests.get(f"{API_BASE}/search", params={"q": query, "page": page})
     resp.raise_for_status()
     data = resp.json().get("data", [])
-    # If it’s a dict (legacy), take its values; if list, normalize
-    if isinstance(data, dict):
-        raw = list(data.values())
-    else:
-        raw = data
+    # if it’s a dict mapping, take its values
+    raw = list(data.values()) if isinstance(data, dict) else data
     return _normalize_list_of_lists(raw)
 
 def fetch_episodes(anime_id: str):
     resp = requests.get(f"{API_BASE}/anime/{anime_id}/episodes")
     resp.raise_for_status()
     data = resp.json().get("data", [])
-    # episodes may also come back as list-of-lists
+    episodes = []
     if isinstance(data, list) and data and isinstance(data[0], list):
-        eps = []
         for item in data:
-            # [episodeId, number, title, ...]
-            ep_id, number, title, *_ = item
-            eps.append({"episodeId": ep_id, "number": number, "title": title})
-        return eps
-    # otherwise assume it’s already a list of dicts
-    return data or []
+            raw_id, number, title, *_ = item
+            episodes.append({
+                "episodeId": _extract_id(raw_id),
+                "number":    number,
+                "title":     title
+            })
+    else:
+        for ep in data or []:
+            ep_id = _extract_id(ep.get("episodeId") or ep.get("id"))
+            episodes.append({
+                "episodeId": ep_id,
+                "number":    ep.get("number"),
+                "title":     ep.get("title")
+            })
+    return episodes
 
 def fetch_sources_and_referer(episode_id: str):
     resp = requests.get(f"{API_BASE}/episode/{episode_id}/sources")
     resp.raise_for_status()
-    blob = resp.json().get("data", {})
+    blob = resp.json().get("data", {}) or {}
     return blob.get("sources", []), blob.get("referer", "")
 
 def fetch_tracks(episode_id: str):
     resp = requests.get(f"{API_BASE}/episode/{episode_id}/tracks")
     resp.raise_for_status()
     data = resp.json().get("data", [])
-    # likely list-of-dicts already, so just return
     return data or []
