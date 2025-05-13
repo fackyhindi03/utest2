@@ -6,17 +6,17 @@ services:
     restart: unless-stopped
     ports:
       - "4000:4000"
-    healthcheck:
-      test: ["CMD","curl","-f","http://localhost:4000/search?q=naruto"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
+    # ── Remove the healthcheck entirely so it never blocks the bot ──────────
+    # healthcheck:
+    #   test: ["CMD","curl","-f","http://localhost:4000/search?q=naruto"]
+    #   interval: 30s
+    #   timeout: 5s
+    #   retries: 3
 
   bot:
     build: .
     container_name: hianime-bot
     depends_on:
-      api:
-        condition: service_healthy
+      - api          # simple dependency, no “condition: service_healthy”
     restart: on-failure
     env_file: .env
