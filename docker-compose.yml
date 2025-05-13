@@ -1,0 +1,22 @@
+version: '3.8'
+services:
+  api:
+    image: ghcr.io/ghoshritesh12/aniwatch:v2.9.0
+    container_name: aniwatch-api
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    healthcheck:
+      test: ["CMD","curl","-f","http://localhost:4000/search?q=naruto"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  bot:
+    build: .
+    container_name: hianime-bot
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: on-failure
+    env_file: .env
