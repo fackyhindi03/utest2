@@ -47,6 +47,8 @@ def fetch_episodes(anime_id: str):
     resp.raise_for_status()
     data = resp.json().get("data", [])
     episodes = []
+
+    # Case A: API returns a list of lists like [[raw_id, number, title, …], …]
     if isinstance(data, list) and data and isinstance(data[0], list):
         for item in data:
             raw_id, number, title, *_ = item
@@ -55,14 +57,27 @@ def fetch_episodes(anime_id: str):
                 "number":    number,
                 "title":     title
             })
-    else:
-        for ep in data or []:
+
+    # Case B: API returns a list of dicts, e.g. [{"episodeId":…, "number":…, "title":…}, …]
+    elif isinstance(data, list) and data and isinstance(data[0], dict):
+        for ep in data:
             ep_id = _extract_id(ep.get("episodeId") or ep.get("id"))
             episodes.append({
                 "episodeId": ep_id,
                 "number":    ep.get("number"),
                 "title":     ep.get("title")
             })
+
+    # Case C: API returns a list of raw strings (IDs)
+    elif isinstance(data, list):
+        for raw in data:
+            if isinstance(raw, str):
+                episodes.append({
+                    "episodeId": _extract_id(raw),
+                    "number":    None,
+                    "title":     ""
+                })
+
     return episodes
 
 def fetch_sources_and_referer(episode_id: str):
